@@ -696,7 +696,7 @@ async function apiFetch(path) {
 
 function renderClan(data) {
   document.getElementById('hero-name').textContent = data.name;
-  document.getElementById('nav-name').textContent = data.name;
+  // document.getElementById('nav-name').textContent = data.name;
   document.getElementById('hero-badge').textContent = `⚡ NIVEL ${data.clanLevel} · ${data.members}/50 MIEMBROS`;
   document.getElementById('hero-desc').textContent = data.description || 'Clan competitivo · Participación obligatoria';
   document.getElementById('stat-members').textContent = `${data.members}/50`;
