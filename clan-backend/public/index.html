@@ -1002,9 +1002,11 @@ async function loadCWL() {
     }).join('');
 
     // Load all war results
-    let wins = 0, losses = 0, totalStars = 0;
     const roundsEl = document.getElementById('cwl-rounds-container');
     roundsEl.innerHTML = '';
+
+    // Collect all round promises and compute stats at the end
+    const allRoundPromises = [];
 
     for (let i = 0; i < rounds.length; i++) {
       const round = rounds[i];
@@ -1013,61 +1015,71 @@ async function loadCWL() {
 
       const roundDiv = document.createElement('div');
       roundDiv.className = 'cwl-round';
-      roundDiv.innerHTML = `<div class="cwl-round-header">Ronda ${i + 1}</div><div id="cwl-round-wars-${i}"><div style="color:#7a8a9a;padding:12px 16px;font-size:13px;">Cargando...</div></div>`;
+      roundDiv.innerHTML = '<div class="cwl-round-header">Ronda ' + (i + 1) + '</div><div id="cwl-round-wars-' + i + '"><div style="color:#7a8a9a;padding:12px 16px;font-size:13px;">Cargando...</div></div>';
       roundsEl.appendChild(roundDiv);
 
-      // Fetch each war in this round
-      Promise.all(validTags.map(tag => apiFetch('/api/cwlwar/' + tag.replace('#', ''))))
+      const roundPromise = Promise.all(validTags.map(tag => apiFetch('/api/cwlwar/' + tag.replace('#', ''))))
         .then(wars => {
-          const warsEl = document.getElementById(`cwl-round-wars-${i}`);
+          const warsEl = document.getElementById('cwl-round-wars-' + i);
+          let roundWins = 0, roundLosses = 0, roundStars = 0;
+
           warsEl.innerHTML = wars.map(war => {
             if (!war || !war.clan) return '';
+            const isOurWar = war.clan.tag === '#2CR9U8VCO' || war.opponent.tag === '#2CR9U8VCO';
             const us = war.clan.tag === '#2CR9U8VCO' ? war.clan : war.opponent;
             const them = war.clan.tag === '#2CR9U8VCO' ? war.opponent : war.clan;
-            const isOurWar = war.clan.tag === '#2CR9U8VCO' || war.opponent.tag === '#2CR9U8VCO';
 
-            let resultBadge = '';
-            let resultClass = '';
+            let resultBadge = '', resultClass = '';
             if (isOurWar && war.state === 'warEnded') {
-              if (us.stars > them.stars) { resultBadge = '✅ V'; resultClass = 'cwl-win'; wins++; totalStars += us.stars; }
-              else if (us.stars < them.stars) { resultBadge = '❌ D'; resultClass = 'cwl-loss'; losses++; totalStars += us.stars; }
-              else { resultBadge = '🤝'; resultClass = 'cwl-prep'; totalStars += us.stars; }
+              if (us.stars > them.stars) { resultBadge = '✅ V'; resultClass = 'cwl-win'; roundWins++; roundStars += us.stars; }
+              else if (us.stars < them.stars) { resultBadge = '❌ D'; resultClass = 'cwl-loss'; roundLosses++; roundStars += us.stars; }
+              else { resultBadge = '🤝'; resultClass = 'cwl-prep'; roundStars += us.stars; }
             } else if (war.state === 'inWar') {
-              resultBadge = '⚔ VIVO'; resultClass = 'cwl-prep';
+              resultBadge = '⚔ EN CURSO'; resultClass = 'cwl-prep';
+              if (isOurWar) roundStars += (us.stars || 0);
             } else if (war.state === 'preparation') {
               resultBadge = '🔜 PREP'; resultClass = 'cwl-prep';
             }
 
-            const c1 = war.clan;
-            const c2 = war.opponent;
-            const c1us = c1.tag === '#2CR9U8VCO';
-            const c2us = c2.tag === '#2CR9U8VCO';
+            const c1 = war.clan, c2 = war.opponent;
+            const c1us = c1.tag === '#2CR9U8VCO', c2us = c2.tag === '#2CR9U8VCO';
 
-            return `<div class="cwl-war-row">
-              <div class="cwl-team">
-                <div class="cwl-team-name">${c1us ? '⚔ ' : ''}${c1.name}</div>
-                <div class="cwl-team-stars ${c1us ? 'us' : ''}">${c1.stars || 0}</div>
-              </div>
-              <div style="text-align:center;">
-                <div class="cwl-vs">VS</div>
-                ${resultBadge ? `<div class="cwl-result-badge ${resultClass}" style="margin-top:4px;">${resultBadge}</div>` : ''}
-              </div>
-              <div class="cwl-team">
-                <div class="cwl-team-name">${c2us ? '⚔ ' : ''}${c2.name}</div>
-                <div class="cwl-team-stars ${c2us ? 'us' : ''}">${c2.stars || 0}</div>
-              </div>
-            </div>`;
+            return '<div class="cwl-war-row">' +
+              '<div class="cwl-team">' +
+                '<div class="cwl-team-name">' + (c1us ? '⚔ ' : '') + c1.name + '</div>' +
+                '<div class="cwl-team-stars ' + (c1us ? 'us' : '') + '">' + (c1.stars || 0) + '</div>' +
+              '</div>' +
+              '<div style="text-align:center;">' +
+                '<div class="cwl-vs">VS</div>' +
+                (resultBadge ? '<div class="cwl-result-badge ' + resultClass + '" style="margin-top:4px;">' + resultBadge + '</div>' : '') +
+              '</div>' +
+              '<div class="cwl-team">' +
+                '<div class="cwl-team-name">' + (c2us ? '⚔ ' : '') + c2.name + '</div>' +
+                '<div class="cwl-team-stars ' + (c2us ? 'us' : '') + '">' + (c2.stars || 0) + '</div>' +
+              '</div>' +
+            '</div>';
           }).join('');
 
-          // Update stats
-          document.getElementById('cwl-wins').textContent = wins;
-          document.getElementById('cwl-losses').textContent = losses;
-          document.getElementById('cwl-stars').textContent = totalStars;
+          return { wins: roundWins, losses: roundLosses, stars: roundStars };
         }).catch(() => {
-          const warsEl = document.getElementById(`cwl-round-wars-${i}`);
+          const warsEl = document.getElementById('cwl-round-wars-' + i);
           if (warsEl) warsEl.innerHTML = '<div style="color:#7a8a9a;padding:12px 16px;font-size:13px;">No disponible</div>';
+          return { wins: 0, losses: 0, stars: 0 };
         });
+
+      allRoundPromises.push(roundPromise);
     }
+
+    // Wait for ALL rounds then update stats
+    Promise.all(allRoundPromises).then(results => {
+      const totals = results.reduce((acc, r) => {
+        acc.wins += r.wins; acc.losses += r.losses; acc.stars += r.stars;
+        return acc;
+      }, { wins: 0, losses: 0, stars: 0 });
+      document.getElementById('cwl-wins').textContent = totals.wins;
+      document.getElementById('cwl-losses').textContent = totals.losses;
+      document.getElementById('cwl-stars').textContent = totals.stars;
+    });
 
   } catch(e) {
     document.getElementById('cwl-rounds-container').innerHTML = '<div style="color:#7a8a9a;padding:20px;">CWL no disponible o no activa.</div>';
